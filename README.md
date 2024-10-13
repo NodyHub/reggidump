@@ -21,10 +21,10 @@ go install github.com/NodyHub/reggidump@latest
 reggidump -h
 Usage: reggidump <target> ... [flags]
 
-Dump Docker images from a registry.
+Dump all Docker images from a registry.
 
 Arguments:
-  <target> ...    Scan target. Can be a file, a registry address or - for stdin.
+  <target> ...    Dump targets. Can be a file, a registry address or - for stdin.
 
 Flags:
   -h, --help                      Show context-sensitive help.

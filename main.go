@@ -24,7 +24,7 @@ type CLI struct {
 	UserAgent    string `short:"u" name:"user-agent" default:"reggidump" help:"User agent string."`
 	Verbose      bool   `short:"v" name:"verbose" help:"Enable verbose output."`
 	Version      kong.VersionFlag
-	Target       []string `arg:"" name:"target" help:"Scan target. Can be a file, a registry address or - for stdin."`
+	Target       []string `arg:"" name:"target" help:"Dump targets. Can be a file, a registry address or - for stdin."`
 }
 
 // version info
@@ -39,7 +39,7 @@ func main() {
 
 	var cli CLI
 	kong.Parse(&cli,
-		kong.Description("Dump Docker images from a registry."),
+		kong.Description("Dump all Docker images from a registry."),
 		kong.UsageOnError(),
 		kong.Vars{
 			"version": fmt.Sprintf("%s (%s), commit %s, built at %s", filepath.Base(os.Args[0]), version, commit, date),
