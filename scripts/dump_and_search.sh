@@ -27,7 +27,7 @@ while read line; do
     # search for files with size >0 in dumped/layer
     for f in $(find $DUMP_DIR/layer -type f -size +0M | grep -v layer_sizes.txt);
     do
-        echo "$(du -h $f | sed "s|$DUMP_DIR/layer/||")" >> $DUMP_DIR/layer/layer_sizes.txt
+        echo "$(du $f | sed "s|$DUMP_DIR/layer/||")" >> $DUMP_DIR/layer/layer_sizes.txt
         rm $f
         touch $f
     done
