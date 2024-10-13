@@ -1,0 +1,2 @@
+# reggidump
+Dump Docker registries
