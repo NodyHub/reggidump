@@ -143,7 +143,6 @@ func main() {
 			logger.Debug("start dump", "path", cli.Dump, "server", s.Address)
 			if err := s.Dump(logger, cli.Dump, cli.ManifestOnly, cli.FailCount); err != nil {
 				logger.Error("failed, that sucks!", "err", err)
-				os.Exit(1)
 			}
 		}
 
