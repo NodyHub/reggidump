@@ -15,6 +15,7 @@ import (
 type CLI struct {
 	Auth         string `short:"a" name:"auth" help:"Registry authentication header."`
 	Dump         string `short:"d" name:"dump" optional:"" help:"Dump image layers to specified directory."`
+	FailCount    int    `short:"f" name:"fail-count" default:"5" help:"Number of failed downloads before giving up a server."`
 	List         bool   `short:"l" name:"list" default:"false" help:"List available images+tags."`
 	ManifestOnly bool   `short:"m" name:"manifest-only" default:"false" help:"Dump only image manifest."`
 	Output       string `short:"o" name:"output" optional:"" default:"-" help:"Output file. Default is stdout."`
@@ -140,7 +141,7 @@ func main() {
 		// dump image layers
 		if len(cli.Dump) > 0 {
 			logger.Debug("start dump", "path", cli.Dump, "server", s.Address)
-			if err := s.Dump(logger, cli.Dump, cli.ManifestOnly); err != nil {
+			if err := s.Dump(logger, cli.Dump, cli.ManifestOnly, cli.FailCount); err != nil {
 				logger.Error("failed, that sucks!", "err", err)
 				os.Exit(1)
 			}

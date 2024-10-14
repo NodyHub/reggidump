@@ -215,19 +215,31 @@ func (s *Server) fetchManifest(img *Image, tag *Tag) error {
 // Dump downloads the image from the registry to the local machine by fetching the manifest
 // for each image and tag combination and then downloading the layers
 // This is a simplified version of the Docker pull command
-func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool) error {
+func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failCount int) error {
 	logger.Debug("dump layers from server", "proto", s.Protocol, "address", s.Address, "port", s.Port)
 	// Download the layers
 	if s.Images == nil {
 		s.FetchImagesAndTags(logger)
 	}
+
+	// setup counter for failed downloads
+	if failCount <= 0 {
+		failCount = 3
+	}
+
 	for _, img := range s.Images {
 		for _, tag := range img.Tags {
+
+			// check if we have reached the fail count
+			if failCount == 0 {
+				return fmt.Errorf("failed too many times, aborting")
+			}
 
 			// check if the manifest has already been fetched
 			if tag.Manifest == nil {
 				if err := s.fetchManifest(&img, &tag); err != nil {
 					logger.Error("failed to fetch manifest", "image", img.Name, "tag", tag.Name, "err", err)
+					failCount--
 					continue
 				}
 			}
@@ -270,6 +282,7 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool) error
 			// download the layers
 			if err := s.downloadLayers(logger, path, &img, &tag); err != nil {
 				logger.Error("failed to download layers", "image", img.Name, "tag", tag.Name, "err", err)
+				failCount--
 				continue
 			}
 		}

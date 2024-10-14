@@ -30,6 +30,7 @@ Flags:
   -h, --help                      Show context-sensitive help.
   -a, --auth=STRING               Registry authentication header.
   -d, --dump=STRING               Dump image layers to specified directory.
+  -f, --fail-count=5              Number of failed downloads before giving up a server.
   -l, --list                      List available images+tags.
   -m, --manifest-only             Dump only image manifest.
   -o, --output="-"                Output file. Default is stdout.
