@@ -34,6 +34,7 @@ Flags:
   -l, --list                      List available images+tags.
   -m, --manifest-only             Dump only image manifest.
   -o, --output="-"                Output file. Default is stdout.
+  -P, --parallel=5                Number of parallel downloads.
   -p, --ping                      Check if target is a registry
   -r, --retry=5                   Number of retries a download.
   -t, --timeout=5                 Timeout in seconds for registry operations.

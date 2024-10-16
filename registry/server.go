@@ -7,15 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 type Server struct {
-	Address         string
-	Images          []Image
-	Protocol        string
-	Port            string
-	ProcessedHashes map[string]struct{}
-	pinged          bool
+	Address  string
+	Images   []Image
+	Protocol string
+	Port     string
+	pinged   bool
 }
 
 func NewServer(address string) *Server {
@@ -46,10 +47,9 @@ func NewServer(address string) *Server {
 	}
 
 	return &Server{
-		Address:         address,
-		Protocol:        protocol,
-		Port:            port,
-		ProcessedHashes: make(map[string]struct{}),
+		Address:  address,
+		Protocol: protocol,
+		Port:     port,
 	}
 }
 
@@ -222,7 +222,7 @@ func (s *Server) fetchManifest(img *Image, tag *Tag) error {
 // Dump downloads the image from the registry to the local machine by fetching the manifest
 // for each image and tag combination and then downloading the layers
 // This is a simplified version of the Docker pull command
-func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failCount int) error {
+func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failCount int32, parallel int) error {
 	logger.Debug("dump layers from server", "proto", s.Protocol, "address", s.Address, "port", s.Port)
 
 	// Fetch list of images and tags
@@ -235,12 +235,47 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 		failCount = 3
 	}
 
+	// setup 5 worker
+	jobs := make(chan dlJob, 100)
+	results := make(chan error, 100)
+	var wg sync.WaitGroup
+	for w := 0; w < parallel; w++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+			for job := range jobs {
+
+				// check if we have reached the fail count
+				if atomic.LoadInt32(&failCount) <= 0 {
+					results <- fmt.Errorf("worker %d: failed too many times, aborting", worker)
+					return
+				}
+
+				// download the layers
+				err := downloadAndLink(logger, worker, path, s, job.img, job.tag, job.blobSum)
+				if err != nil {
+					logger.Error("failed to download layers", "worker", worker, "image", job.img.Name, "tag", job.tag.Name, "err", err)
+					atomic.AddInt32(&failCount, -1)
+				}
+			}
+		}(w)
+	}
+
+	onErrorCloser := func() {
+		for len(jobs) > 0 {
+			<-jobs // drain the channel
+		}
+		close(jobs)
+		wg.Wait()
+	}
+
 	// iterate over images and tags and download the layers
 	for _, img := range s.Images {
 		for _, tag := range img.Tags {
 
 			// check if we have reached the fail count
-			if failCount == 0 {
+			if atomic.LoadInt32(&failCount) <= 0 {
+				onErrorCloser()
 				return fmt.Errorf("failed too many times, aborting")
 			}
 
@@ -248,7 +283,7 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 			if tag.Manifest == nil {
 				if err := s.fetchManifest(&img, &tag); err != nil {
 					logger.Error("failed to fetch manifest", "image", img.Name, "tag", tag.Name, "err", err)
-					failCount--
+					atomic.AddInt32(&failCount, -1)
 					continue
 				}
 			}
@@ -261,24 +296,31 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 			imagePath := filepath.Join(path, s.Address, img.Name, tag.Name)
 			if _, err := os.Stat(imagePath); os.IsNotExist(err) {
 				if err := os.MkdirAll(imagePath, 0755); err != nil {
-					return fmt.Errorf("failed to create directory: %s", imagePath)
+					onErrorCloser()
+					logger.Error("failed to create directory", "path", imagePath, "err", err)
+					continue
 				}
 			} else if err != nil {
-				return fmt.Errorf("failed to check directory: %s", imagePath)
+				onErrorCloser()
+				logger.Error("failed to check directory", "path", imagePath, "err", err)
+				continue
 			}
 
 			manifestPath := filepath.Join(imagePath, "manifest.json")
 			if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 				manifest, err := json.MarshalIndent(tag.Manifest, "", "  ")
 				if err != nil {
-					return fmt.Errorf("failed to marshal manifest: %s", err)
+					logger.Error("failed to marshal manifest", "image", img.Name, "tag", tag.Name, "err", err)
+					continue
 				}
 				if err := os.WriteFile(manifestPath, manifest, 0644); err != nil {
-					return fmt.Errorf("failed to write manifest: %s", err)
+					logger.Error("failed to write manifest", "image", img.Name, "tag", tag.Name, "err", err)
+					continue
 				}
 				logger.Debug("manifest stored", "image", img.Name, "tag", tag.Name, "path", manifestPath)
 			} else if err != nil {
-				return fmt.Errorf("failed to check manifest: %s", err)
+				logger.Error("failed to check manifest", "image", img.Name, "tag", tag.Name, "err", err)
+				continue
 			}
 
 			// check if we only want the manifest
@@ -287,51 +329,65 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 			}
 
 			// download the layers
-			if err := s.downloadLayers(logger, path, &img, &tag); err != nil {
-				logger.Error("failed to download layers", "image", img.Name, "tag", tag.Name, "err", err)
-				failCount--
-				continue
+			logger.Debug("download layers", "image", img.Name, "tag", tag.Name, "layers", len(tag.Manifest.FsLayers))
+
+			for _, layer := range tag.Manifest.FsLayers {
+				j := dlJob{
+					img:     &img,
+					tag:     &tag,
+					blobSum: layer.BlobSum,
+				}
+
+				jobs <- j
 			}
 		}
 	}
+
+	close(jobs)
+	wg.Wait()
 
 	return nil
 }
 
-func (s *Server) downloadLayers(logger *slog.Logger, path string, img *Image, tag *Tag) error {
+type dlJob struct {
+	img     *Image
+	tag     *Tag
+	blobSum string
+}
 
-	logger.Debug("download layers", "image", img.Name, "tag", tag.Name, "layers", len(tag.Manifest.FsLayers))
+func downloadAndLink(logger *slog.Logger, worker int, dstDir string, s *Server, img *Image, tag *Tag, blobSum string) error {
 
-	// Download the layers
-	for _, layer := range tag.Manifest.FsLayers {
+	// assamble src & dst for download
+	requestURL := fmt.Sprintf("%s/v2/%s/blobs/%s", s.GetUrl(), img.Name, blobSum)
+	downloadDst := filepath.Join(dstDir, "layer", blobSum)
 
-		requestURL := fmt.Sprintf("%s/v2/%s/blobs/%s", s.GetUrl(), img.Name, layer.BlobSum)
-		layerPath := filepath.Join(path, "layer", layer.BlobSum)
+	// link layer to image
+	imagePath := filepath.Join(dstDir, s.Address, img.Name, tag.Name)
+	fsLayer := filepath.Join(imagePath, blobSum)
 
-		// check if layer exists, if not download it
-		if _, err := os.Stat(layerPath); err != nil {
-			logger.Debug("downloading layer", "address", s.Address, "image", img.Name, "tag", tag.Name, "digest", layer.BlobSum[7:19])
-			if err := download(requestURL, layerPath); err != nil {
-				return fmt.Errorf("failed to download layer: %s", err)
-			}
-		}
-
-		// link layer to image
-		imagePath := filepath.Join(path, s.Address, img.Name, tag.Name)
-		linkedLayerPath := filepath.Join(imagePath, layer.BlobSum)
-		if _, err := os.Lstat(linkedLayerPath); os.IsNotExist(err) {
-			imgNameParts := strings.Split(img.Name, "/")
-			traversal := strings.Repeat("../", len(imgNameParts))
-			if err := os.Symlink(filepath.Join("..", traversal, "..", "layer", layer.BlobSum), linkedLayerPath); err != nil {
-				return fmt.Errorf("failed to create symlink: %s", err)
-			}
-		} else if err != nil {
-			return fmt.Errorf("failed to check symlink: %s", err)
-		}
-
-		// store the blob sum
-		s.ProcessedHashes[layer.BlobSum] = struct{}{}
-
+	// get relative path from fsLayer to downloadDst
+	// this is needed to create the symlink
+	fsLayerTarget, err := filepath.Rel(filepath.Dir(fsLayer), downloadDst)
+	if err != nil {
+		return fmt.Errorf("failed to get relative path: %s", err)
 	}
+
+	// check if layer exists, if not download it
+	if _, err := os.Stat(downloadDst); err != nil {
+		logger.Debug("downloading layer", "worker", worker, "address", s.Address, "image", img.Name, "tag", tag.Name, "digest", blobSum[7:19])
+		if err := download(requestURL, downloadDst); err != nil {
+			return fmt.Errorf("failed to download layer: %s", err)
+		}
+	}
+
+	// check if symlink exists, if not create it
+	if _, err := os.Lstat(fsLayer); os.IsNotExist(err) {
+		if err := os.Symlink(fsLayerTarget, fsLayer); err != nil {
+			return fmt.Errorf("failed to create symlink: %s", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to check symlink: %s", err)
+	}
+
 	return nil
 }

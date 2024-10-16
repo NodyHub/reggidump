@@ -19,6 +19,7 @@ type CLI struct {
 	List         bool   `short:"l" name:"list" default:"false" help:"List available images+tags."`
 	ManifestOnly bool   `short:"m" name:"manifest-only" default:"false" help:"Dump only image manifest."`
 	Output       string `short:"o" name:"output" optional:"" default:"-" help:"Output file. Default is stdout."`
+	Parallel     int    `short:"P" name:"parallel" default:"5" help:"Number of parallel downloads."`
 	Ping         bool   `short:"p" name:"ping" default:"false" help:"Check if target is a registry"`
 	Retry        int    `short:"r" name:"retry" default:"5" help:"Number of retries a download."`
 	Timeout      int    `short:"t" name:"timeout" optional:"" default:"5" help:"Timeout in seconds for registry operations."`
@@ -141,7 +142,7 @@ func main() {
 		// dump image layers
 		if len(cli.Dump) > 0 {
 			logger.Debug("start dump", "path", cli.Dump, "server", s.Address)
-			if err := s.Dump(logger, cli.Dump, cli.ManifestOnly, cli.FailCount); err != nil {
+			if err := s.Dump(logger, cli.Dump, cli.ManifestOnly, int32(cli.FailCount), cli.Parallel); err != nil {
 				logger.Error("failed, that sucks!", "err", err)
 			}
 		}
