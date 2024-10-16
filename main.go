@@ -106,7 +106,7 @@ func main() {
 		logger.Debug("processing next", "target", t)
 		s := registry.NewServer(t)
 
-		// check for ping
+		// ping server to check if it is a registry and negotiate protocol + port
 		if cli.Ping {
 			if err := s.Ping(); err == nil {
 				logger.Info("server is a registry", "address", s.Address)

@@ -66,13 +66,15 @@ type protoPair struct {
 	Port     string
 }
 
-// Ping performs a http request and checks if the server is a registry server
+// Ping performs a http request and checks if the server is a registry server.
+// The check is executed only once
 func (s *Server) Ping() error {
 
 	// Check if the server has already been pinged
 	if s.pinged {
 		return nil
 	}
+	s.pinged = true
 
 	// Try the protocol and port specified in the address
 	var protocols []protoPair
@@ -108,6 +110,11 @@ func (s *Server) FetchImagesAndTags(logger *slog.Logger) error {
 
 	if err := s.Ping(); err != nil {
 		return fmt.Errorf("cannot fetch images and tags: %s", err)
+	}
+
+	// Check if the images have already been fetched
+	if s.Images != nil {
+		return nil
 	}
 
 	// Get the list of images from the registry
@@ -217,9 +224,10 @@ func (s *Server) fetchManifest(img *Image, tag *Tag) error {
 // This is a simplified version of the Docker pull command
 func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failCount int) error {
 	logger.Debug("dump layers from server", "proto", s.Protocol, "address", s.Address, "port", s.Port)
-	// Download the layers
-	if s.Images == nil {
-		s.FetchImagesAndTags(logger)
+
+	// Fetch list of images and tags
+	if err := s.FetchImagesAndTags(logger); err != nil {
+		return fmt.Errorf("failed to dump layer: %w", err)
 	}
 
 	// setup counter for failed downloads
@@ -227,6 +235,7 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 		failCount = 3
 	}
 
+	// iterate over images and tags and download the layers
 	for _, img := range s.Images {
 		for _, tag := range img.Tags {
 
@@ -243,7 +252,6 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 					continue
 				}
 			}
-
 			if tag.Manifest == nil {
 				logger.Warn("no manifest found, skip", "image", img.Name, "tag", tag.Name)
 				continue
@@ -259,7 +267,6 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 				return fmt.Errorf("failed to check directory: %s", imagePath)
 			}
 
-			// store manifest
 			manifestPath := filepath.Join(imagePath, "manifest.json")
 			if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 				manifest, err := json.MarshalIndent(tag.Manifest, "", "  ")
