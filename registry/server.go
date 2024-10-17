@@ -250,10 +250,6 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 
 				// check if we have reached the fail count
 				if atomic.LoadInt32(&failCount) <= 0 {
-					// empty the channel
-					for len(jobs) > 0 {
-						<-jobs
-					}
 					logger.Error("failed too many times, aborting", "worker", worker)
 					return
 				}
@@ -261,32 +257,21 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 				// download the layers
 				err := downloadAndLink(logger, worker, path, s, job.img, job.tag, job.blobSum)
 				if err != nil {
-					logger.Error("failed to download layers", "worker", worker, "image", job.img.Name, "tag", job.tag.Name, "err", err)
+					logger.Error("failed to download layer", "worker", worker, "image", job.img.Name, "tag", job.tag.Name, "blobSum", job.blobSum, "err", err)
 					atomic.AddInt32(&failCount, -1)
 				}
 			}
 		}(w)
 	}
 
-	onErrorCloser := func() {
-		for len(jobs) > 0 {
-			<-jobs // drain the channel
-		}
-		close(jobs)
-		wg.Wait()
-	}
-
 	// iterate over images and tags and download the layers
 	for _, img := range s.Images {
 		for _, tag := range img.Tags {
-
-			// check if we have reached the fail count
 			if atomic.LoadInt32(&failCount) <= 0 {
-				onErrorCloser()
+				close(jobs)
+				wg.Wait()
 				return fmt.Errorf("failed too many times, aborting")
 			}
-
-			// check if the manifest has already been fetched
 			if tag.Manifest == nil {
 				if err := s.fetchManifest(&img, &tag); err != nil {
 					logger.Error("failed to fetch manifest", "image", img.Name, "tag", tag.Name, "err", err)
@@ -303,12 +288,10 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 			imagePath := filepath.Join(path, s.Address, img.Name, tag.Name)
 			if _, err := os.Stat(imagePath); os.IsNotExist(err) {
 				if err := os.MkdirAll(imagePath, 0755); err != nil {
-					onErrorCloser()
 					logger.Error("failed to create directory", "path", imagePath, "err", err)
 					continue
 				}
 			} else if err != nil {
-				onErrorCloser()
 				logger.Error("failed to check directory", "path", imagePath, "err", err)
 				continue
 			}
