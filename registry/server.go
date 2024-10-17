@@ -237,7 +237,6 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 
 	// setup 5 worker
 	jobs := make(chan dlJob, 100)
-	results := make(chan error, 100)
 	var wg sync.WaitGroup
 	for w := 0; w < parallel; w++ {
 		wg.Add(1)
@@ -247,7 +246,7 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 
 				// check if we have reached the fail count
 				if atomic.LoadInt32(&failCount) <= 0 {
-					results <- fmt.Errorf("worker %d: failed too many times, aborting", worker)
+					logger.Error("worker %d: failed too many times, aborting", worker)
 					return
 				}
 
