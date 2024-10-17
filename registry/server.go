@@ -241,7 +241,11 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 	for w := 0; w < parallel; w++ {
 		wg.Add(1)
 		go func(worker int) {
-			defer wg.Done()
+			defer func() {
+				logger.Debug("worker done", "worker", worker)
+				wg.Done()
+
+			}()
 			for job := range jobs {
 
 				// check if we have reached the fail count
