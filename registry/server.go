@@ -246,6 +246,10 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 
 				// check if we have reached the fail count
 				if atomic.LoadInt32(&failCount) <= 0 {
+					// empty the channel
+					for len(jobs) > 0 {
+						<-jobs
+					}
 					logger.Error("failed too many times, aborting", "worker", worker)
 					return
 				}
