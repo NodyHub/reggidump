@@ -22,7 +22,7 @@ type CLI struct {
 	Parallel     int    `short:"P" name:"parallel" default:"3" help:"Number of parallel downloads."`
 	Ping         bool   `short:"p" name:"ping" default:"false" help:"Check if target is a registry"`
 	Retry        int    `short:"r" name:"retry" default:"5" help:"Number of retries a download."`
-	Timeout      int    `short:"t" name:"timeout" optional:"" default:"5" help:"Timeout in seconds for registry operations."`
+	Timeout      int    `short:"t" name:"timeout" optional:"" default:"15" help:"Timeout in seconds for registry operations."`
 	UserAgent    string `short:"u" name:"user-agent" default:"reggidump" help:"User agent string."`
 	Verbose      bool   `short:"v" name:"verbose" help:"Enable verbose output."`
 	Version      kong.VersionFlag
