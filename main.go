@@ -123,7 +123,7 @@ func main() {
 
 			// fetch image list + tags
 			logger.Debug("list images and tags", "server", s.Address)
-			if err := s.FetchImagesAndTags(logger); err != nil {
+			if err := s.FetchImagesAndTags(logger, cli.Parallel); err != nil {
 				logger.Error("failed to fetch images", "err", err)
 				continue
 			}

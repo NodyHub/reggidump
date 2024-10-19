@@ -106,7 +106,7 @@ func (s *Server) Ping() error {
 }
 
 // FetchImagesAndTags returns a list of images from the registry server
-func (s *Server) FetchImagesAndTags(logger *slog.Logger) error {
+func (s *Server) FetchImagesAndTags(logger *slog.Logger, parallel int) error {
 
 	if err := s.Ping(); err != nil {
 		return fmt.Errorf("cannot fetch images and tags: %s", err)
@@ -138,12 +138,31 @@ func (s *Server) FetchImagesAndTags(logger *slog.Logger) error {
 	}
 
 	// fetch tags for each image
-	for i := range s.Images {
-		logger.Debug("fetch tags", "image", s.Images[i].Name)
-		if err := s.FetchTags(&s.Images[i]); err != nil {
-			return fmt.Errorf("failed to fetch tags: %s", err)
-		}
+	jobs := make(chan *Image, 100)
+	var wg sync.WaitGroup
+	for w := 0; w < parallel; w++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer func() {
+				logger.Debug("worker done", "worker", worker)
+				wg.Done()
+
+			}()
+			for job := range jobs {
+				logger.Debug("fetch tags", "image", job.Name)
+				if err := s.FetchTags(job); err != nil {
+					logger.Error("failed to fetch tags", "worker", worker, "image", job.Name, "err", err)
+				}
+			}
+		}(w)
 	}
+
+	for i := range s.Images {
+		jobs <- &s.Images[i]
+	}
+
+	close(jobs)
+	wg.Wait()
 
 	return nil
 }
@@ -226,7 +245,7 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 	logger.Debug("dump layers from server", "proto", s.Protocol, "address", s.Address, "port", s.Port)
 
 	// Fetch list of images and tags
-	if err := s.FetchImagesAndTags(logger); err != nil {
+	if err := s.FetchImagesAndTags(logger, parallel); err != nil {
 		return fmt.Errorf("failed to dump layer: %w", err)
 	}
 
@@ -235,7 +254,7 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 		failCount = 3
 	}
 
-	// setup 5 worker
+	// setup worker
 	jobs := make(chan dlJob, 100)
 	var wg sync.WaitGroup
 	for w := 0; w < parallel; w++ {
