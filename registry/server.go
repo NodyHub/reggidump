@@ -257,7 +257,7 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 
 				// check if we have reached the fail count
 				if atomic.LoadInt32(&failCount) <= 0 {
-					logger.Error("failed too many times, aborting", "worker", worker)
+					logger.Error("failed too many times, aborting", "worker", worker, "failCount", failCount, "image", job.img.Name, "tag", job.tag.Name, "len(jobs)", len(jobs))
 					return
 				}
 			}
