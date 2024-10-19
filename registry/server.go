@@ -248,17 +248,17 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 			}()
 			for job := range jobs {
 
-				// check if we have reached the fail count
-				if atomic.LoadInt32(&failCount) <= 0 {
-					logger.Error("failed too many times, aborting", "worker", worker)
-					return
-				}
-
 				// download the layers
 				err := downloadAndLink(logger, worker, path, s, job.img, job.tag, job.blobSum)
 				if err != nil {
 					logger.Error("failed to download layer", "worker", worker, "image", job.img.Name, "tag", job.tag.Name, "blobSum", job.blobSum, "err", err)
 					atomic.AddInt32(&failCount, -1)
+				}
+
+				// check if we have reached the fail count
+				if atomic.LoadInt32(&failCount) <= 0 {
+					logger.Error("failed too many times, aborting", "worker", worker)
+					return
 				}
 			}
 		}(w)
