@@ -343,15 +343,15 @@ func (s *Server) Dump(logger *slog.Logger, path string, manifestOnly bool, failC
 
 			// download the layers
 			logger.Debug("download layers", "image", img.Name, "tag", tag.Name, "layers", len(tag.Manifest.FsLayers))
-
 			for _, layer := range tag.Manifest.FsLayers {
-				j := dlJob{
+				if atomic.LoadInt32(&failCount) <= 0 { // check if we have reached the fail count
+					break
+				}
+				jobs <- dlJob{
 					img:     &img,
 					tag:     &tag,
 					blobSum: layer.BlobSum,
 				}
-
-				jobs <- j
 			}
 		}
 	}
