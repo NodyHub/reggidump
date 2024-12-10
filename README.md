@@ -1,5 +1,5 @@
 # reggidump
-Dump Docker registries.
+Dump Docker registries. As of now, only Manaifest.json SchemaVersion 1 is supported.
 
 ## Install
 
