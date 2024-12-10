@@ -62,6 +62,7 @@ func GetFsLayerDotGraph(m *Manifest) string {
 	for i := 1; i < len(m.FsLayers); i++ {
 		sb.WriteString(" -> \"" + m.FsLayers[i].BlobSum + "\"")
 	}
+	sb.WriteString(";")
 	return sb.String()
 }
 
