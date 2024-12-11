@@ -2,7 +2,6 @@ package registry
 
 import (
 	"encoding/json"
-	"strings"
 )
 
 type ManifestV1 struct {
@@ -45,27 +44,4 @@ func (m *ManifestV1) ParseHistoryEntries() ([]*HistoryEntry, error) {
 		historyEntries = append(historyEntries, &entryStruct)
 	}
 	return historyEntries, nil
-}
-
-func GetFsLayerDotGraph(m *ManifestV1) string {
-	if m == nil {
-		return ""
-	}
-	if len(m.FsLayers) == 0 {
-		return ""
-	}
-	if m.SchemaVersion == 2 {
-		return getFsLayerDotGraphV2(m)
-	}
-	var sb strings.Builder
-	sb.WriteString("\"" + m.FsLayers[0].BlobSum + "\"")
-	for i := 1; i < len(m.FsLayers); i++ {
-		sb.WriteString(" -> \"" + m.FsLayers[i].BlobSum + "\"")
-	}
-	sb.WriteString(";")
-	return sb.String()
-}
-
-func getFsLayerDotGraphV2(m *ManifestV1) string {
-	panic("not implemented")
 }
