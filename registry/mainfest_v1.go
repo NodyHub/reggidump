@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 )
 
-type Manifest struct {
+type ManifestV1 struct {
 	SchemaVersion int    `json:"schemaVersion"`
 	Name          string `json:"name"`
 	Tag           string `json:"tag"`
@@ -33,7 +33,7 @@ type Manifest struct {
 }
 
 // ParseHistoryEntry parses the V1Compatibility field of a history entry
-func (m *Manifest) ParseHistoryEntries() ([]*HistoryEntry, error) {
+func (m *ManifestV1) ParseHistoryEntries() ([]*HistoryEntry, error) {
 	// Parse the V1Compatibility field
 	var historyEntries []*HistoryEntry
 	for _, entry := range m.History {

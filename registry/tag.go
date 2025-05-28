@@ -7,7 +7,7 @@ import (
 
 type Tag struct {
 	Name     string
-	Manifest *Manifest
+	Manifest *ManifestV1
 }
 
 func (t *Tag) Starter() string {

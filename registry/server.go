@@ -220,7 +220,7 @@ func (s *Server) fetchManifest(img *Image, tag *Tag) error {
 	defer res.Body.Close()
 
 	// Parse the response
-	m := &Manifest{}
+	m := &ManifestV1{}
 	if err := json.NewDecoder(res.Body).Decode(m); err != nil {
 		return err
 	}
