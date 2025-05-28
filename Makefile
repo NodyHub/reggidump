@@ -1,7 +1,12 @@
 default: build
 
+VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS=-ldflags "-X github.com/NodyHub/reggidump/cmd.buildVersion=$(VERSION) -X github.com/NodyHub/reggidump/cmd.buildCommit=$(COMMIT) -X github.com/NodyHub/reggidump/cmd.buildDate=$(DATE)"
+
 build:
-	@go build -o reggidump .
+	@go build $(LDFLAGS) -o reggidump .
 
 install: build
 	@mv reggidump $(GOPATH)/bin/reggidump
